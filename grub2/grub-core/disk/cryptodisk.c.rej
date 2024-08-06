@@ -1,0 +1,17 @@
+***************
+*** 1317,1323 ****
+  {
+    grub_disk_dev_register (&grub_cryptodisk_dev);
+    cmd = grub_register_extcmd ("cryptomount", grub_cmd_cryptomount, 0,
+-                              N_("SOURCE|-u UUID|-a|-b"),
+                               N_("Mount a crypto device."), options);
+    grub_procfs_register ("luks_script", &luks_script);
+  }
+--- 1386,1392 ----
+  {
+    grub_disk_dev_register (&grub_cryptodisk_dev);
+    cmd = grub_register_extcmd ("cryptomount", grub_cmd_cryptomount, 0,
++                              N_("SOURCE|-u UUID|-a|-b|-s MOD [ID]"),
+                               N_("Mount a crypto device."), options);
+    grub_procfs_register ("luks_script", &luks_script);
+  }

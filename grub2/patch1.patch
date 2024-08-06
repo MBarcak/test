@@ -1,0 +1,191 @@
+---
+
+v2: add conditional prompting to geli.c
+v3: make getter specify prompt requirement
+---
+ grub-core/disk/cryptodisk.c        |  2 +-
+ grub-core/disk/geli.c              | 12 +++++++-----
+ grub-core/disk/luks.c              | 12 +++++++-----
+ grub-core/disk/luks2.c             | 12 +++++++-----
+ grub-core/lib/crypto.c             |  4 ++++
+ grub-core/osdep/unix/password.c    |  4 ++++
+ grub-core/osdep/windows/password.c |  4 ++++
+ include/grub/cryptodisk.h          |  6 +++++-
+ 8 files changed, 39 insertions(+), 17 deletions(-)
+
+diff --git a/grub-core/disk/cryptodisk.c b/grub-core/disk/cryptodisk.c
+index b62835acc..c51c2edb8 100644
+--- a/grub-core/disk/cryptodisk.c
++++ b/grub-core/disk/cryptodisk.c
+@@ -1011,7 +1011,7 @@ grub_cryptodisk_scan_device_real (const char *name, grub_disk_t source)
+     if (!dev)
+       continue;
+     
+-    err = cr->recover_key (source, dev);
++    err = cr->recover_key (source, dev, grub_password_get);
+     if (err)
+     {
+       cryptodisk_close (dev);
+diff --git a/grub-core/disk/geli.c b/grub-core/disk/geli.c
+index 2f34a35e6..3d826104d 100644
+--- a/grub-core/disk/geli.c
++++ b/grub-core/disk/geli.c
+@@ -398,7 +398,8 @@ configure_ciphers (grub_disk_t disk, const char *check_uuid,
+ }
+ 
+ static grub_err_t
+-recover_key (grub_disk_t source, grub_cryptodisk_t dev)
++recover_key (grub_disk_t source, grub_cryptodisk_t dev,
++            grub_passwd_cb *password_get)
+ {
+   grub_size_t keysize;
+   grub_uint8_t digest[GRUB_CRYPTO_MAX_MDLEN];
+@@ -438,11 +439,12 @@ recover_key (grub_disk_t source, grub_cryptodisk_t dev)
+   tmp = NULL;
+   if (source->partition)
+     tmp = grub_partition_get_name (source->partition);
+-  grub_printf_ (N_("Enter passphrase for %s%s%s (%s): "), source->name,
+-               source->partition ? "," : "", tmp ? : "",
+-               dev->uuid);
++  if (password_get (NULL, 0))
++    grub_printf_ (N_("Enter passphrase for %s%s%s (%s): "), source->name,
++                 source->partition ? "," : "", tmp ? : "",
++                 dev->uuid);
+   grub_free (tmp);
+-  if (!grub_password_get (passphrase, MAX_PASSPHRASE))
++  if (!password_get (passphrase, MAX_PASSPHRASE))
+     return grub_error (GRUB_ERR_BAD_ARGUMENT, "Passphrase not supplied");
+ 
+   /* Calculate the PBKDF2 of the user supplied passphrase.  */
+diff --git a/grub-core/disk/luks.c b/grub-core/disk/luks.c
+index 13103ea6a..13eee2a18 100644
+--- a/grub-core/disk/luks.c
++++ b/grub-core/disk/luks.c
+@@ -152,7 +152,8 @@ configure_ciphers (grub_disk_t disk, const char *check_uuid,
+ 
+ static grub_err_t
+ luks_recover_key (grub_disk_t source,
+-                 grub_cryptodisk_t dev)
++                 grub_cryptodisk_t dev,
++                 grub_passwd_cb *password_get)
+ {
+   struct grub_luks_phdr header;
+   grub_size_t keysize;
+@@ -187,11 +188,12 @@ luks_recover_key (grub_disk_t source,
+   tmp = NULL;
+   if (source->partition)
+     tmp = grub_partition_get_name (source->partition);
+-  grub_printf_ (N_("Enter passphrase for %s%s%s (%s): "), source->name,
+-              source->partition ? "," : "", tmp ? : "",
+-              dev->uuid);
++  if (password_get (NULL, 0))
++         grub_printf_ (N_("Enter passphrase for %s%s%s (%s): "), source->name,
++                       source->partition ? "," : "", tmp ? : "",
++                       dev->uuid);
+   grub_free (tmp);
+-  if (!grub_password_get (passphrase, MAX_PASSPHRASE))
++  if (!password_get (passphrase, MAX_PASSPHRASE))
+     {
+       grub_free (split_key);
+       return grub_error (GRUB_ERR_BAD_ARGUMENT, "Passphrase not supplied");
+diff --git a/grub-core/disk/luks2.c b/grub-core/disk/luks2.c
+index 7460d7b58..7597d8576 100644
+--- a/grub-core/disk/luks2.c
++++ b/grub-core/disk/luks2.c
+@@ -542,7 +542,8 @@ luks2_decrypt_key (grub_uint8_t *out_key,
+ 
+ static grub_err_t
+ luks2_recover_key (grub_disk_t source,
+-                  grub_cryptodisk_t crypt)
++                  grub_cryptodisk_t crypt,
++                  grub_passwd_cb *password_get)
+ {
+   grub_uint8_t candidate_key[GRUB_CRYPTODISK_MAX_KEYLEN];
+   char passphrase[MAX_PASSPHRASE], cipher[32];
+@@ -584,10 +585,11 @@ luks2_recover_key (grub_disk_t source,
+   /* Get the passphrase from the user. */
+   if (source->partition)
+     part = grub_partition_get_name (source->partition);
+-  grub_printf_ (N_("Enter passphrase for %s%s%s (%s): "), source->name,
+-               source->partition ? "," : "", part ? : "",
+-               crypt->uuid);
+-  if (!grub_password_get (passphrase, MAX_PASSPHRASE))
++  if (password_get (NULL, 0))
++    grub_printf_ (N_("Enter passphrase for %s%s%s (%s): "), source->name,
++                 source->partition ? "," : "", part ? : "",
++                 crypt->uuid);
++  if (!password_get (passphrase, MAX_PASSPHRASE))
+     {
+       ret = grub_error (GRUB_ERR_BAD_ARGUMENT, "Passphrase not supplied");
+       goto err;
+diff --git a/grub-core/lib/crypto.c b/grub-core/lib/crypto.c
+index ca334d5a4..34272a7ad 100644
+--- a/grub-core/lib/crypto.c
++++ b/grub-core/lib/crypto.c
+@@ -456,6 +456,10 @@ grub_password_get (char buf[], unsigned buf_size)
+   unsigned cur_len = 0;
+   int key;
+ 
++  if (!buf)
++    /* want prompt */
++    return 1;
++
+   while (1)
+     {
+       key = grub_getkey (); 
+diff --git a/grub-core/osdep/unix/password.c b/grub-core/osdep/unix/password.c
+index 9996b244b..365ac4bad 100644
+--- a/grub-core/osdep/unix/password.c
++++ b/grub-core/osdep/unix/password.c
+@@ -34,6 +34,10 @@ grub_password_get (char buf[], unsigned buf_size)
+   int tty_changed = 0;
+   char *ptr;
+ 
++  if (!buf)
++    /* want prompt */
++    return 1;
++
+   grub_refresh ();
+ 
+   /* Disable echoing. Based on glibc.  */
+diff --git a/grub-core/osdep/windows/password.c 
+b/grub-core/osdep/windows/password.c
+index 1d3af0c2c..2a6615611 100644
+--- a/grub-core/osdep/windows/password.c
++++ b/grub-core/osdep/windows/password.c
+@@ -33,6 +33,10 @@ grub_password_get (char buf[], unsigned buf_size)
+   DWORD mode = 0;
+   char *ptr;
+ 
++  if (!buf)
++    /* want prompt */
++    return 1;
++
+   grub_refresh ();
+   
+   GetConsoleMode (hStdin, &mode);
+diff --git a/include/grub/cryptodisk.h b/include/grub/cryptodisk.h
+index dcf17fbb3..737487bb4 100644
+--- a/include/grub/cryptodisk.h
++++ b/include/grub/cryptodisk.h
+@@ -112,6 +112,9 @@ struct grub_cryptodisk
+ };
+ typedef struct grub_cryptodisk *grub_cryptodisk_t;
+ 
++/* must match prototype for grub_password_get */
++typedef int (grub_passwd_cb)(char buf[], unsigned buf_size);
++
+ struct grub_cryptodisk_dev
+ {
+   struct grub_cryptodisk_dev *next;
+@@ -119,7 +122,8 @@ struct grub_cryptodisk_dev
+ 
+   grub_cryptodisk_t (*scan) (grub_disk_t disk, const char *check_uuid,
+                             int boot_only);
+-  grub_err_t (*recover_key) (grub_disk_t disk, grub_cryptodisk_t dev);
++  grub_err_t (*recover_key) (grub_disk_t disk, grub_cryptodisk_t dev,
++                            grub_passwd_cb *get_password);
+ };
+ typedef struct grub_cryptodisk_dev *grub_cryptodisk_dev_t;
+ 
+-- 

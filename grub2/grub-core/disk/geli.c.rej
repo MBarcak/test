@@ -1,0 +1,26 @@
+***************
+*** 438,448 ****
+    tmp = NULL;
+    if (source->partition)
+      tmp = grub_partition_get_name (source->partition);
+-   grub_printf_ (N_("Enter passphrase for %s%s%s (%s): "), source->name,
+-                source->partition ? "," : "", tmp ? : "",
+-                dev->uuid);
+    grub_free (tmp);
+-   if (!grub_password_get (passphrase, MAX_PASSPHRASE))
+      return grub_error (GRUB_ERR_BAD_ARGUMENT, "Passphrase not supplied");
+  
+    /* Calculate the PBKDF2 of the user supplied passphrase.  */
+--- 439,450 ----
+    tmp = NULL;
+    if (source->partition)
+      tmp = grub_partition_get_name (source->partition);
++   if (password_get (NULL, 0))
++     grub_printf_ (N_("Enter passphrase for %s%s%s (%s): "), source->name,
++                  source->partition ? "," : "", tmp ? : "",
++                  dev->uuid);
+    grub_free (tmp);
++   if (!password_get (passphrase, MAX_PASSPHRASE))
+      return grub_error (GRUB_ERR_BAD_ARGUMENT, "Passphrase not supplied");
+  
+    /* Calculate the PBKDF2 of the user supplied passphrase.  */
